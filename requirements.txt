@@ -1,0 +1,25 @@
+# HTS Magnet Testing Automation — Python dependencies
+# Compatible with Python 3.13
+# Install with: pip install -r requirements.txt
+#
+# NOTE: labjack-ljm is NOT listed here because it requires the LabJack LJM
+# driver to be installed on the system first. Install the driver from:
+#   https://labjack.com/pages/support?doc=/software-driver/installer-downloads/ljm-software-installers-t4-t7-t8-digit/
+# Then run: pip install labjack-ljm
+
+# GUI
+PySide6==6.11.1
+
+# Live plotting (used inside the GUI)
+pyqtgraph==0.14.0
+numpy==2.4.6
+
+# MQTT client — used by all driver scripts and the GUI
+paho-mqtt==2.1.0
+
+# Modbus communication — compressor driver
+pymodbus==3.13.1
+pyserial==3.5
+
+# QuestDB time-series database client
+questdb==4.1.0

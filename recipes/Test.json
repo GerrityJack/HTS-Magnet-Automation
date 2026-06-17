@@ -1,0 +1,8 @@
+{
+  "name": "Test",
+  "foreline_pump_duration_s": 30,
+  "target_pressure_torr": 0.001,
+  "leak_check_duration_s": 60,
+  "max_leak_rate_torr_per_s": 5e-05,
+  "compressor_delay_s": 5
+}
