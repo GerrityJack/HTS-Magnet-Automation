@@ -71,9 +71,10 @@ DOUT_PUMP               = 1    # FIO1 -> Relay CH2 -> roughing pump
 LABJACK_POLL_RATE_S     = 0.5
 
 # ── QuestDB ───────────────────────────────────────────────────────────────────
-# QuestDB is running on a separate machine on the lab network.
-# Update this IP if QuestDB moves to a different host.
-QUESTDB_HOST                  = "198.125.227.226"
+# QuestDB runs locally, launched by startup.bat from:
+# %USERPROFILE%\.local\bin\questdb\bin\questdb.exe
+# Data is stored at: %USERPROFILE%\.local\bin\questdb\data
+QUESTDB_HOST                  = "localhost"
 QUESTDB_PORT                  = 9000
 QUESTDB_TABLE_LABJACK         = "labjack_metrics"
 QUESTDB_TABLE_COMPRESSOR      = "compressor_metrics"

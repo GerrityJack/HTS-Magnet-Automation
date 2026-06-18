@@ -11,22 +11,23 @@ echo   %DATE%  %TIME%
 echo  ============================================================
 echo.
 
-:: %~dp0 expands to the folder this script lives in, with a trailing
-:: backslash. This makes the script work from anywhere it is placed --
-:: no hardcoded path required.
+:: %~dp0 is the folder this script lives in (with trailing backslash)
 SET "LAB_DIR=%~dp0"
 IF "%LAB_DIR:~-1%"=="\" SET "LAB_DIR=%LAB_DIR:~0,-1%"
+
 SET "VENV_ACTIVATE=%LAB_DIR%\venv\Scripts\activate.bat"
-:: Primary Mosquitto location on this machine (user install via uv/manual)
 SET "MOSQUITTO_EXE=C:\Users\scuser\MQTT\Mosquitto\mosquitto.exe"
-:: Fallback to standard Program Files install location
 IF NOT EXIST "%MOSQUITTO_EXE%" SET "MOSQUITTO_EXE=C:\Program Files\mosquitto\mosquitto.exe"
 SET "MOSQUITTO_SUB=C:\Users\scuser\MQTT\Mosquitto\mosquitto_sub.exe"
 IF NOT EXIST "%MOSQUITTO_SUB%" SET "MOSQUITTO_SUB=C:\Program Files\mosquitto\mosquitto_sub.exe"
-SET MQTT_PORT=1883
+SET "QUESTDB_REMOTE=198.125.227.226"
+SET "QUESTDB_EXE=%USERPROFILE%\.local\bin\questdb\bin\questdb.exe"
+SET "QUESTDB_DATA=%USERPROFILE%\.local\bin\questdb\data"
 SET QUESTDB_PORT=9000
-SET MOSQUITTO_WAIT=3
-SET QUESTDB_WAIT=8
+SET MQTT_HOST=localhost
+SET MQTT_PORT=1883
+SET MOSQUITTO_WAIT=4
+SET QUESTDB_WAIT=12
 SET DRIVER_WAIT=4
 SET HAD_ERROR=0
 
@@ -52,25 +53,24 @@ echo.
 :: ── Step 2: Start Mosquitto ───────────────────────────────────────────────────
 echo [2/6] Starting Mosquitto MQTT broker...
 
-:: Check if Mosquitto is already listening on port 1883
+:: Check if already listening on port 1883
 powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%MQTT_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
 IF %ERRORLEVEL% EQU 0 (
     echo  OK - Mosquitto already running on port %MQTT_PORT%.
     goto MOSQUITTO_DONE
 )
 
-:: Try to start as a Windows service first (works if installed with service option)
+:: Try Windows service first
 net start mosquitto >nul 2>&1
 IF %ERRORLEVEL% EQU 0 (
     echo  OK - Mosquitto started as Windows service.
     goto MOSQUITTO_DONE
 )
 
-:: Fall back to launching the exe directly.
-:: cmd /c is used so the -v argument goes to mosquitto.exe not to start.
+:: Launch the exe directly
 IF NOT EXIST "%MOSQUITTO_EXE%" (
-    echo  ERROR: Mosquitto not found.
-    echo  Tried: %MOSQUITTO_EXE%
+    echo  ERROR: Mosquitto not found at:
+    echo         %MOSQUITTO_EXE%
     echo  Update MOSQUITTO_EXE at the top of this script.
     SET HAD_ERROR=1
     goto SHOW_RESULT
@@ -82,7 +82,7 @@ timeout /t %MOSQUITTO_WAIT% /nobreak >nul
 :: Verify it came up
 powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%MQTT_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
 IF %ERRORLEVEL% EQU 0 (
-    echo  OK - Mosquitto started at localhost:%MQTT_PORT%
+    echo  OK - Mosquitto running at localhost:%MQTT_PORT%
 ) ELSE (
     echo  ERROR: Mosquitto launched but not responding on port %MQTT_PORT%.
     echo  Check the Mosquitto Broker window for error messages.
@@ -93,243 +93,41 @@ IF %ERRORLEVEL% EQU 0 (
 :MOSQUITTO_DONE
 echo.
 
-:: ── Step 3: Start QuestDB ─────────────────────────────────────────────────────
-echo [3/6] Checking QuestDB at 198.125.227.226:9000...
-
-:: QuestDB runs on a separate machine on the lab network -- nothing to
-:: start locally. We just verify it is reachable before continuing.
-powershell -NoProfile -Command "try{$r=Invoke-WebRequest -Uri 'http://198.125.227.226:9000' -TimeoutSec 5 -UseBasicParsing;exit 0}catch{exit 1}" >nul 2>&1
-IF %ERRORLEVEL% EQU 0 (
-    echo  OK - QuestDB reachable at 198.125.227.226:9000
-) ELSE (
-    echo  WARNING: QuestDB at 198.125.227.226:9000 is not responding.
-    echo    Check that the QuestDB machine is powered on and on the network.
-    echo    Data will not be logged until it is reachable -- continuing anyway.
-)
-echo.
-off
-chcp 65001 >nul
-SETLOCAL ENABLEDELAYEDEXPANSION
-TITLE HTS Magnet Testing Automation - System Startup
-COLOR 0A
-
-echo.
-echo  ============================================================
-echo   HTS Magnet Testing Automation - System Startup
-echo   %DATE%  %TIME%
-echo  ============================================================
-echo.
-
-:: %~dp0 expands to the folder this script lives in, with a trailing
-:: backslash. This makes the script work from anywhere it is placed --
-:: no hardcoded path required.
-SET "LAB_DIR=%~dp0"
-IF "%LAB_DIR:~-1%"=="\" SET "LAB_DIR=%LAB_DIR:~0,-1%"
-SET "VENV_ACTIVATE=%LAB_DIR%\venv\Scripts\activate.bat"
-:: Primary Mosquitto location on this machine (user install via uv/manual)
-SET "MOSQUITTO_EXE=C:\Users\scuser\MQTT\Mosquitto\mosquitto.exe"
-:: Fallback to standard Program Files install location
-IF NOT EXIST "%MOSQUITTO_EXE%" SET "MOSQUITTO_EXE=C:\Program Files\mosquitto\mosquitto.exe"
-SET "MOSQUITTO_SUB=C:\Users\scuser\MQTT\Mosquitto\mosquitto_sub.exe"
-IF NOT EXIST "%MOSQUITTO_SUB%" SET "MOSQUITTO_SUB=C:\Program Files\mosquitto\mosquitto_sub.exe"
-SET MQTT_PORT=1883
-SET QUESTDB_PORT=9000
-SET MOSQUITTO_WAIT=3
-SET QUESTDB_WAIT=8
-SET DRIVER_WAIT=4
-SET HAD_ERROR=0
-
-:: ── Step 1: Check virtual environment ────────────────────────────────────────
-echo [1/6] Checking Python environment...
-IF NOT EXIST "%VENV_ACTIVATE%" (
-    echo.
-    echo  ERROR: Virtual environment not found at:
-    echo         %VENV_ACTIVATE%
-    echo  Run setup_environment.bat first.
-    SET HAD_ERROR=1
-    goto SHOW_RESULT
-)
-call "%VENV_ACTIVATE%"
-IF %ERRORLEVEL% NEQ 0 (
-    echo  ERROR: Failed to activate virtual environment.
-    SET HAD_ERROR=1
-    goto SHOW_RESULT
-)
-echo  OK - environment activated.
-echo.
-
-:: ── Step 2: Start Mosquitto ───────────────────────────────────────────────────
-echo [2/6] Starting Mosquitto MQTT broker...
-
-:: Check if Mosquitto is already listening on port 1883
-powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%MQTT_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
-IF %ERRORLEVEL% EQU 0 (
-    echo  OK - Mosquitto already running on port %MQTT_PORT%.
-    goto MOSQUITTO_DONE
-)
-
-:: Try to start as a Windows service first (works if installed with service option)
-net start mosquitto >nul 2>&1
-IF %ERRORLEVEL% EQU 0 (
-    echo  OK - Mosquitto started as Windows service.
-    goto MOSQUITTO_DONE
-)
-
-:: Fall back to launching the exe directly.
-:: cmd /c is used so the -v argument goes to mosquitto.exe not to start.
-IF NOT EXIST "%MOSQUITTO_EXE%" (
-    echo  ERROR: Mosquitto not found.
-    echo  Tried: %MOSQUITTO_EXE%
-    echo  Update MOSQUITTO_EXE at the top of this script.
-    SET HAD_ERROR=1
-    goto SHOW_RESULT
-)
-start "Mosquitto Broker" /MIN cmd /c ""%MOSQUITTO_EXE%" -v"
-echo  Waiting %MOSQUITTO_WAIT%s for Mosquitto to start...
-timeout /t %MOSQUITTO_WAIT% /nobreak >nul
-
-:: Verify it came up
-powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%MQTT_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
-IF %ERRORLEVEL% EQU 0 (
-    echo  OK - Mosquitto started at localhost:%MQTT_PORT%
-) ELSE (
-    echo  ERROR: Mosquitto launched but not responding on port %MQTT_PORT%.
-    echo  Check the Mosquitto Broker window for error messages.
-    SET HAD_ERROR=1
-    goto SHOW_RESULT
-)
-
-:MOSQUITTO_DONE
-echo.
-
-:: ── Step 3: Start QuestDB ─────────────────────────────────────────────────────
-echo [3/6] Checking QuestDB at 198.125.227.226:9000...
-
-:: QuestDB is running on a separate lab machine -- we just verify
-:: it is reachable. No local process to start.
-powershell -Command "try{Invoke-WebRequest -Uri 'http://198.125.227.226:9000' -TimeoutSec 5 -UseBasicParsing|Out-Null;exit 0}catch{exit 1}" >nul 2>&1
-IF %ERRORLEVEL% EQU 0 (
-    echo  OK - QuestDB reachable at 198.125.227.226:9000
-) ELSE (
-    echo  WARNING: QuestDB at 198.125.227.226:9000 is not responding.
-    echo    - Check that the QuestDB machine is powered on and connected
-    echo    - Data will not be logged until QuestDB is reachable
-    echo    - The rest of the system will still start normally
-)
-echo.
-off
-chcp 65001 >nul
-SETLOCAL ENABLEDELAYEDEXPANSION
-TITLE HTS Magnet Testing Automation - System Startup
-COLOR 0A
-
-echo.
-echo  ============================================================
-echo   HTS Magnet Testing Automation - System Startup
-echo   %DATE%  %TIME%
-echo  ============================================================
-echo.
-
-:: %~dp0 expands to the folder this script lives in, with a trailing
-:: backslash. This makes the script work from anywhere it is placed --
-:: no hardcoded path required.
-SET "LAB_DIR=%~dp0"
-IF "%LAB_DIR:~-1%"=="\" SET "LAB_DIR=%LAB_DIR:~0,-1%"
-SET "VENV_ACTIVATE=%LAB_DIR%\venv\Scripts\activate.bat"
-:: Primary Mosquitto location on this machine (user install via uv/manual)
-SET "MOSQUITTO_EXE=C:\Users\scuser\MQTT\Mosquitto\mosquitto.exe"
-:: Fallback to standard Program Files install location
-IF NOT EXIST "%MOSQUITTO_EXE%" SET "MOSQUITTO_EXE=C:\Program Files\mosquitto\mosquitto.exe"
-SET "MOSQUITTO_SUB=C:\Users\scuser\MQTT\Mosquitto\mosquitto_sub.exe"
-IF NOT EXIST "%MOSQUITTO_SUB%" SET "MOSQUITTO_SUB=C:\Program Files\mosquitto\mosquitto_sub.exe"
-SET MQTT_PORT=1883
-SET QUESTDB_PORT=9000
-SET MOSQUITTO_WAIT=3
-SET QUESTDB_WAIT=8
-SET DRIVER_WAIT=4
-SET HAD_ERROR=0
-
-:: ── Step 1: Check virtual environment ────────────────────────────────────────
-echo [1/6] Checking Python environment...
-IF NOT EXIST "%VENV_ACTIVATE%" (
-    echo.
-    echo  ERROR: Virtual environment not found at:
-    echo         %VENV_ACTIVATE%
-    echo  Run setup_environment.bat first.
-    SET HAD_ERROR=1
-    goto SHOW_RESULT
-)
-call "%VENV_ACTIVATE%"
-IF %ERRORLEVEL% NEQ 0 (
-    echo  ERROR: Failed to activate virtual environment.
-    SET HAD_ERROR=1
-    goto SHOW_RESULT
-)
-echo  OK - environment activated.
-echo.
-
-:: ── Step 2: Start Mosquitto ───────────────────────────────────────────────────
-echo [2/6] Starting Mosquitto MQTT broker...
-sc query mosquitto >nul 2>&1
-IF %ERRORLEVEL% EQU 0 (
-    sc query mosquitto | findstr "RUNNING" >nul 2>&1
-    IF %ERRORLEVEL% EQU 0 (
-        echo  OK - Mosquitto already running as Windows service.
-        goto MOSQUITTO_DONE
-    )
-)
-net start mosquitto >nul 2>&1
-IF %ERRORLEVEL% EQU 0 (
-    echo  OK - Mosquitto started as Windows service.
-    goto MOSQUITTO_DONE
-)
-IF NOT EXIST "%MOSQUITTO_EXE%" (
-    echo  ERROR: Mosquitto not found at %MOSQUITTO_EXE%
-    echo  Install from https://mosquitto.org/download/
-    SET HAD_ERROR=1
-    goto SHOW_RESULT
-)
-start "Mosquitto Broker" /MIN "%MOSQUITTO_EXE%" -v
-echo  Waiting %MOSQUITTO_WAIT%s for broker to start...
-timeout /t %MOSQUITTO_WAIT% /nobreak >nul
-:MOSQUITTO_DONE
-echo.
-
-:: ── Step 3: Start QuestDB ─────────────────────────────────────────────────────
+:: ── Step 3: Check / Start QuestDB ────────────────────────────────────────────
 echo [3/6] Starting QuestDB...
 
-:: Check if QuestDB is already responding before trying to start it
-powershell -Command "try{Invoke-WebRequest -Uri 'http://localhost:%QUESTDB_PORT%' -TimeoutSec 2 -UseBasicParsing|Out-Null;exit 0}catch{exit 1}" >nul 2>&1
+:: Check if QuestDB is already running anywhere
+powershell -NoProfile -Command "try{Invoke-WebRequest -Uri 'http://localhost:%QUESTDB_PORT%' -TimeoutSec 2 -UseBasicParsing|Out-Null;exit 0}catch{exit 1}" >nul 2>&1
 IF %ERRORLEVEL% EQU 0 (
-    echo  OK - QuestDB already running at http://localhost:%QUESTDB_PORT%
+    echo  OK - QuestDB already running at localhost:%QUESTDB_PORT%
     goto QUESTDB_DONE
 )
 
-:: QuestDB standalone Windows binary -- no Docker or virtualization
-:: required. Download from https://questdb.io/download/ and extract
-:: so questdb.exe ends up at: %LAB_DIR%\questdb\bin\questdb.exe
-SET "QUESTDB_EXE=%LAB_DIR%\questdb\bin\questdb.exe"
+:: Launch the local binary (lives outside the repo in %%USERPROFILE%%\.localin)
 IF NOT EXIST "%QUESTDB_EXE%" (
     echo  ERROR: QuestDB binary not found at:
-    echo    %QUESTDB_EXE%
-    echo  Download the Windows binaries from https://questdb.io/download/
-    echo  and extract them so questdb.exe is at that path.
+    echo         %QUESTDB_EXE%
+    echo  Download from https://questdb.io/download/ and install Java 25,
+    echo  then extract so questdb.exe is at that path.
     SET HAD_ERROR=1
     goto SHOW_RESULT
 )
 
-echo  Launching QuestDB...
-start "QuestDB" /MIN "%QUESTDB_EXE%" -d "%LAB_DIR%\questdb\data"
+start "QuestDB" /MIN cmd /c ""%QUESTDB_EXE%" start -d "%QUESTDB_DATA%""
 echo  Waiting %QUESTDB_WAIT%s for QuestDB to initialise...
 timeout /t %QUESTDB_WAIT% /nobreak >nul
 
-:QUESTDB_DONE
-powershell -Command "try{Invoke-WebRequest -Uri 'http://localhost:%QUESTDB_PORT%' -TimeoutSec 3 -UseBasicParsing|Out-Null;exit 0}catch{exit 1}" >nul 2>&1
+powershell -NoProfile -Command "try{Invoke-WebRequest -Uri 'http://localhost:%QUESTDB_PORT%' -TimeoutSec 3 -UseBasicParsing|Out-Null;exit 0}catch{exit 1}" >nul 2>&1
 IF %ERRORLEVEL% EQU 0 (
-    echo  OK - QuestDB up at http://localhost:%QUESTDB_PORT%
+    echo  OK - QuestDB started at localhost:%QUESTDB_PORT%
 ) ELSE (
-    echo  WARNING: QuestDB not responding yet - still initialising.
+    echo  ERROR: QuestDB launched but not responding on port %QUESTDB_PORT%.
+    echo  Check the QuestDB window for errors. Java 25 must be installed.
+    SET HAD_ERROR=1
+    goto SHOW_RESULT
 )
+
+:QUESTDB_DONE
 echo.
 
 :: ── Step 4: Start LabJack driver ──────────────────────────────────────────────
@@ -338,14 +136,13 @@ IF NOT EXIST "%LAB_DIR%\labjack_mqtt_driver.py" (
     echo  WARNING: labjack_mqtt_driver.py not found - skipping.
     goto LABJACK_DONE
 )
-SET LJ_RUNNING=0
+SET LJ_COUNT=0
 FOR /F %%p IN ('powershell -NoProfile -Command "Get-Process python*,python3* -ErrorAction SilentlyContinue | Where-Object {$_.Path} | ForEach-Object {(Get-WmiObject Win32_Process -Filter (\"ProcessId=\" + $_.Id)).CommandLine} | Where-Object {$_ -like \"*labjack_mqtt_driver*\"} | Measure-Object | Select-Object -ExpandProperty Count" 2^>nul') DO SET LJ_COUNT=%%p
-IF "!LJ_COUNT!" GTR "0" SET LJ_RUNNING=1
-IF %LJ_RUNNING% EQU 1 (
+IF "!LJ_COUNT!" GTR "0" (
     echo  INFO: LabJack driver already running - skipping.
 ) ELSE (
     start "LabJack Driver" /MIN cmd /k "chcp 65001 >nul && call "%VENV_ACTIVATE%" && cd /d "%LAB_DIR%" && python labjack_mqtt_driver.py"
-    echo  Waiting %DRIVER_WAIT%s for LabJack driver...
+    echo  Waiting %DRIVER_WAIT%s for LabJack driver to initialise...
     timeout /t %DRIVER_WAIT% /nobreak >nul
     echo  OK - LabJack driver launched.
 )
@@ -358,14 +155,13 @@ IF NOT EXIST "%LAB_DIR%\compressor_mqtt_driver.py" (
     echo  WARNING: compressor_mqtt_driver.py not found - skipping.
     goto COMPRESSOR_DONE
 )
-SET CP_RUNNING=0
+SET CP_COUNT=0
 FOR /F %%p IN ('powershell -NoProfile -Command "Get-Process python*,python3* -ErrorAction SilentlyContinue | Where-Object {$_.Path} | ForEach-Object {(Get-WmiObject Win32_Process -Filter (\"ProcessId=\" + $_.Id)).CommandLine} | Where-Object {$_ -like \"*compressor_mqtt_driver*\"} | Measure-Object | Select-Object -ExpandProperty Count" 2^>nul') DO SET CP_COUNT=%%p
-IF "!CP_COUNT!" GTR "0" SET CP_RUNNING=1
-IF %CP_RUNNING% EQU 1 (
+IF "!CP_COUNT!" GTR "0" (
     echo  INFO: Compressor driver already running - skipping.
 ) ELSE (
     start "Compressor Driver" /MIN cmd /k "chcp 65001 >nul && call "%VENV_ACTIVATE%" && cd /d "%LAB_DIR%" && python compressor_mqtt_driver.py"
-    echo  Waiting %DRIVER_WAIT%s for Compressor driver...
+    echo  Waiting %DRIVER_WAIT%s for Compressor driver to initialise...
     timeout /t %DRIVER_WAIT% /nobreak >nul
     echo  OK - Compressor driver launched.
 )
@@ -378,10 +174,9 @@ IF NOT EXIST "%LAB_DIR%\lab_logger.py" (
     echo  WARNING: lab_logger.py not found - skipping.
     goto LOGGER_DONE
 )
-SET LG_RUNNING=0
+SET LG_COUNT=0
 FOR /F %%p IN ('powershell -NoProfile -Command "Get-Process python*,python3* -ErrorAction SilentlyContinue | Where-Object {$_.Path} | ForEach-Object {(Get-WmiObject Win32_Process -Filter (\"ProcessId=\" + $_.Id)).CommandLine} | Where-Object {$_ -like \"*lab_logger*\"} | Measure-Object | Select-Object -ExpandProperty Count" 2^>nul') DO SET LG_COUNT=%%p
-IF "!LG_COUNT!" GTR "0" SET LG_RUNNING=1
-IF %LG_RUNNING% EQU 1 (
+IF "!LG_COUNT!" GTR "0" (
     echo  INFO: Lab Logger already running - skipping.
 ) ELSE (
     start "Lab Logger" /MIN cmd /k "chcp 65001 >nul && call "%VENV_ACTIVATE%" && cd /d "%LAB_DIR%" && python lab_logger.py"
@@ -419,8 +214,7 @@ goto SHOW_RESULT
 :SHUTDOWN
 echo  Stopping background Python scripts...
 powershell -NoProfile -Command "Get-WmiObject Win32_Process | Where-Object { $_.Name -like 'python*' -and ($_.CommandLine -like '*labjack_mqtt_driver*' -or $_.CommandLine -like '*compressor_mqtt_driver*' -or $_.CommandLine -like '*lab_logger*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" 2>nul
-echo  Done. QuestDB left running -- close its window manually if you
-echo  want to stop it (data is saved automatically).
+echo  Done. QuestDB left running (data is safe).
 
 :SHOW_RESULT
 echo.

@@ -173,15 +173,15 @@ def check_mosquitto():
             "         Start Mosquitto: net start mosquitto")
 
 def check_questdb():
-    """Check the remote QuestDB instance at 198.125.227.226:9000.
-    Reported as a warning since the machine may not always be on."""
+    """Check that local QuestDB is running on localhost:9000.
+    Reported as a warning since startup.bat starts it on demand."""
     try:
         req = urllib.request.urlopen(
-            "http://198.125.227.226:9000", timeout=5)
-        return f"QuestDB reachable at 198.125.227.226:9000  (HTTP {req.status})"
+            "http://localhost:9000", timeout=5)
+        return f"QuestDB reachable at localhost:9000  (HTTP {req.status})"
     except Exception:
         # Report as warning not failure — startup.bat starts QuestDB automatically
-        warn("QuestDB  ->  not reachable at 198.125.227.226:9000")
+        warn("QuestDB  ->  not reachable at localhost:9000")
         print("         Check that the QuestDB machine is powered on")
         print("         and connected to the lab network.")
         global warnings
