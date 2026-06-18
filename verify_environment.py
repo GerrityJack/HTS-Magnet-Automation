@@ -12,10 +12,17 @@ Does NOT require any lab hardware to be connected.
 """
 
 import sys
+import os
 import importlib
+import importlib.util
 import subprocess
 import urllib.request
 import socket
+from pathlib import Path as _Path
+
+# This script locates itself automatically using its own file path,
+# so it works no matter where the project folder is placed.
+LAB_DIR = str(_Path(__file__).resolve().parent)
 
 # ── Colour helpers ────────────────────────────────────────────────────────────
 # Works on Windows 10+ with ANSI support. Falls back to plain text if not.
@@ -166,53 +173,32 @@ def check_mosquitto():
             "         Start Mosquitto: net start mosquitto")
 
 def check_questdb():
-    """Try the QuestDB HTTP console. Reported as a warning if not running
-    since QuestDB is started on demand by startup.bat, not always running."""
+    """Check the remote QuestDB instance at 198.125.227.226:9000.
+    Reported as a warning since the machine may not always be on."""
     try:
         req = urllib.request.urlopen(
-            "http://localhost:9000", timeout=3)
-        return f"QuestDB reachable on localhost:9000  (HTTP {req.status})"
+            "http://198.125.227.226:9000", timeout=5)
+        return f"QuestDB reachable at 198.125.227.226:9000  (HTTP {req.status})"
     except Exception:
         # Report as warning not failure — startup.bat starts QuestDB automatically
-        warn("QuestDB  →  not reachable on localhost:9000")
-        print("         This is normal if startup.bat has not been run yet.")
-        print("         startup.bat will start it automatically.")
+        warn("QuestDB  ->  not reachable at 198.125.227.226:9000")
+        print("         Check that the QuestDB machine is powered on")
+        print("         and connected to the lab network.")
         global warnings
         warnings += 1
         return "warn"
 
-def check_questdb_binary():
-    """
-    QuestDB runs as a standalone Windows binary on this system (no
-    Docker/virtualization required). This checks the binary exists
-    where startup.bat expects it, as a setup sanity check -- it does
-    not check whether QuestDB is currently running (see check_questdb).
-    """
-    questdb_exe = os.path.join(LAB_DIR, "questdb", "bin", "questdb.exe")
-    if not os.path.exists(questdb_exe):
-        warn(f"QuestDB binary not found at: {questdb_exe}")
-        print("         Download from https://questdb.io/download/ "
-              "and extract so questdb.exe is at that path.")
-        global warnings
-        warnings += 1
-        return "warn"
-    return f"QuestDB binary found at {questdb_exe}"
+# QuestDB runs on a separate lab machine -- the binary check is not
+# needed here. check_questdb() above already verifies network reachability.
 
 check("Mosquitto MQTT broker", check_mosquitto)
 check_questdb()
-check_questdb_binary()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 5 — Local lab scripts importable
 # ─────────────────────────────────────────────────────────────────────────────
 header("── Lab scripts ──────────────────────────────────────────")
 
-import os, importlib.util
-
-# This script locates itself automatically using its own file path,
-# so it works no matter where the project folder is placed.
-from pathlib import Path as _Path
-LAB_DIR = str(_Path(__file__).resolve().parent)
 
 LAB_SCRIPTS = [
     ("mqtt_config",     "mqtt_config.py"),

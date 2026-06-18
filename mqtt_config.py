@@ -71,7 +71,9 @@ DOUT_PUMP               = 1    # FIO1 -> Relay CH2 -> roughing pump
 LABJACK_POLL_RATE_S     = 0.5
 
 # ── QuestDB ───────────────────────────────────────────────────────────────────
-QUESTDB_HOST                  = "localhost"
+# QuestDB is running on a separate machine on the lab network.
+# Update this IP if QuestDB moves to a different host.
+QUESTDB_HOST                  = "198.125.227.226"
 QUESTDB_PORT                  = 9000
 QUESTDB_TABLE_LABJACK         = "labjack_metrics"
 QUESTDB_TABLE_COMPRESSOR      = "compressor_metrics"
