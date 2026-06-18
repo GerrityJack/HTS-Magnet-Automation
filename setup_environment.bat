@@ -30,53 +30,80 @@ SET "REQ_FILE=%LAB_DIR%\requirements.txt"
 :: ── Find Python 3.13 ─────────────────────────────────────────────────────────
 echo.
 echo [1/4] Checking for Python 3.13...
+echo  ^(Trying each detection method in order -- this may take a moment^)
+echo.
 
-py -3.13 --version >nul 2>&1
-IF %ERRORLEVEL% EQU 0 (
-    FOR /F "tokens=*" %%v IN ('py -3.13 --version') DO echo  Found via py launcher: %%v
-    SET "PYTHON_CMD=py -3.13"
-    goto PYTHON_FOUND
-)
-
-python --version 2>&1 | findstr "3.13" >nul
-IF %ERRORLEVEL% EQU 0 (
-    FOR /F "tokens=*" %%v IN ('python --version') DO echo  Found via python: %%v
-    SET "PYTHON_CMD=python"
-    goto PYTHON_FOUND
-)
-
-python3 --version 2>&1 | findstr "3.13" >nul
-IF %ERRORLEVEL% EQU 0 (
-    FOR /F "tokens=*" %%v IN ('python3 --version') DO echo  Found via python3: %%v
-    SET "PYTHON_CMD=python3"
-    goto PYTHON_FOUND
-)
-
-:: uv installs versioned executables like python3.13.exe rather than
-:: python.exe -- check for that exact name too.
+:: -- Method 1: python3.13 -- the exact name uv uses on this machine.
+:: Tried first since this is confirmed to work via where.exe.
+echo   - Trying "python3.13"...
 python3.13 --version >nul 2>&1
 IF %ERRORLEVEL% EQU 0 (
-    FOR /F "tokens=*" %%v IN ('python3.13 --version') DO echo  Found via python3.13: %%v
+    FOR /F "tokens=*" %%v IN ('python3.13 --version 2^>^&1') DO echo  Found via python3.13: %%v
     SET "PYTHON_CMD=python3.13"
     goto PYTHON_FOUND
 )
 
-:: Last resort: check the common uv install location directly, in case
-:: the user has not added it to PATH yet.
+:: -- Method 2: direct path to the uv install location, in case PATH
+:: has not propagated to this shell yet even though the file exists.
+echo   - Trying direct uv path...
 IF EXIST "%USERPROFILE%\.local\bin\python3.13.exe" (
-    echo  Found via uv default install path: %USERPROFILE%\.local\bin\python3.13.exe
-    echo  WARNING: This folder is not on PATH. Add it for normal use:
-    echo    %USERPROFILE%\.local\bin
-    SET "PYTHON_CMD=%USERPROFILE%\.local\bin\python3.13.exe"
+    "%USERPROFILE%\.local\bin\python3.13.exe" --version >nul 2>&1
+    IF %ERRORLEVEL% EQU 0 (
+        echo  Found via direct uv path: %USERPROFILE%\.local\bin\python3.13.exe
+        SET "PYTHON_CMD=%USERPROFILE%\.local\bin\python3.13.exe"
+        goto PYTHON_FOUND
+    )
+)
+
+:: -- Method 3: py launcher (python.org installs only -- uv does not
+:: register with this, so it is expected to fail on uv-only machines).
+echo   - Trying "py -3.13" launcher...
+py -3.13 --version >nul 2>&1
+IF %ERRORLEVEL% EQU 0 (
+    FOR /F "tokens=*" %%v IN ('py -3.13 --version 2^>^&1') DO echo  Found via py launcher: %%v
+    SET "PYTHON_CMD=py -3.13"
     goto PYTHON_FOUND
 )
 
-echo  ERROR: Python 3.13 not found on PATH.
+:: -- Method 4: bare "python" command, only accepted if it reports 3.13
+:: exactly (avoids accidentally picking up a 3.14 or other version).
+echo   - Trying "python"...
+python --version >nul 2>&1
+IF %ERRORLEVEL% EQU 0 (
+    python --version 2>&1 | findstr /C:"3.13" >nul
+    IF %ERRORLEVEL% EQU 0 (
+        FOR /F "tokens=*" %%v IN ('python --version 2^>^&1') DO echo  Found via python: %%v
+        SET "PYTHON_CMD=python"
+        goto PYTHON_FOUND
+    ) ELSE (
+        echo     "python" exists but is not 3.13 -- skipping.
+    )
+)
+
+:: -- Method 5: bare "python3" command, same exact-version check.
+echo   - Trying "python3"...
+python3 --version >nul 2>&1
+IF %ERRORLEVEL% EQU 0 (
+    python3 --version 2>&1 | findstr /C:"3.13" >nul
+    IF %ERRORLEVEL% EQU 0 (
+        FOR /F "tokens=*" %%v IN ('python3 --version 2^>^&1') DO echo  Found via python3: %%v
+        SET "PYTHON_CMD=python3"
+        goto PYTHON_FOUND
+    ) ELSE (
+        echo     "python3" exists but is not 3.13 -- skipping.
+    )
+)
+
+echo.
+echo  ERROR: Python 3.13 not found by any detection method.
+echo  Diagnostic info -- run these manually to check:
+echo    where.exe python3.13
+echo    python3.13 --version
+echo.
 echo  If you installed Python with uv, add this folder to PATH:
 echo    %USERPROFILE%\.local\bin
-echo  ^(Settings ^> System ^> Advanced ^> Environment Variables ^> User Path^)
-echo  Then close this window and run setup_environment.bat again.
-echo  Otherwise, reinstall Python 3.13 and tick "Add Python to PATH".
+echo  ^(Settings ^> Edit environment variables for your account ^> User Path^)
+echo  Then close ALL terminal windows and run setup_environment.bat again.
 goto FATAL
 
 :PYTHON_FOUND
