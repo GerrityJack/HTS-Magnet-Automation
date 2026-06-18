@@ -27,7 +27,7 @@ SET QUESTDB_PORT=9000
 SET MQTT_HOST=localhost
 SET MQTT_PORT=1883
 SET MOSQUITTO_WAIT=4
-SET QUESTDB_WAIT=12
+SET QUESTDB_WAIT=25
 SET DRIVER_WAIT=4
 SET HAD_ERROR=0
 
@@ -113,17 +113,30 @@ IF NOT EXIST "%QUESTDB_EXE%" (
 )
 
 start "QuestDB" /MIN cmd /c ""%QUESTDB_EXE%" -d "%QUESTDB_DATA%""
-echo  Waiting %QUESTDB_WAIT%s for QuestDB to initialise...
-timeout /t %QUESTDB_WAIT% /nobreak >nul
+echo  Waiting for QuestDB to initialise (this can take up to 30s)...
 
-powershell -NoProfile -Command "try{Invoke-WebRequest -Uri 'http://localhost:%QUESTDB_PORT%' -TimeoutSec 3 -UseBasicParsing|Out-Null;exit 0}catch{exit 1}" >nul 2>&1
+:: Retry loop -- check every 3 seconds for up to QUESTDB_WAIT seconds total
+SET QDB_READY=0
+SET QDB_TRIES=0
+:QDB_WAIT_LOOP
+timeout /t 3 /nobreak >nul
+SET /A QDB_TRIES+=3
+powershell -NoProfile -Command "try{Invoke-WebRequest -Uri 'http://localhost:%QUESTDB_PORT%' -TimeoutSec 2 -UseBasicParsing|Out-Null;exit 0}catch{exit 1}" >nul 2>&1
 IF %ERRORLEVEL% EQU 0 (
-    echo  OK - QuestDB started at localhost:%QUESTDB_PORT%
+    SET QDB_READY=1
+    goto QDB_WAIT_DONE
+)
+IF %QDB_TRIES% LSS %QUESTDB_WAIT% (
+    echo  Still waiting... (%QDB_TRIES%s)
+    goto QDB_WAIT_LOOP
+)
+:QDB_WAIT_DONE
+IF %QDB_READY% EQU 1 (
+    echo  OK - QuestDB ready at localhost:%QUESTDB_PORT% (took %QDB_TRIES%s)
 ) ELSE (
-    echo  ERROR: QuestDB launched but not responding on port %QUESTDB_PORT%.
-    echo  Check the QuestDB window for error messages.
-    SET HAD_ERROR=1
-    goto SHOW_RESULT
+    echo  WARNING: QuestDB is still starting after %QUESTDB_WAIT%s.
+    echo  It may still come up -- check http://localhost:%QUESTDB_PORT%
+    echo  in your browser. Continuing startup anyway.
 )
 
 :QUESTDB_DONE
