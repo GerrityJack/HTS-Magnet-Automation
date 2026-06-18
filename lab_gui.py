@@ -57,8 +57,13 @@ except ImportError:
     print("ERROR: mqtt_config.py not found. Place it in the same folder as lab_gui.py.")
     sys.exit(1)
 
-RECIPE_DIR  = Path("recipes")
-RUN_LOG_DIR = Path("run_logs")
+# Anchor these to the folder this script lives in, not the current
+# working directory -- so they land in the right place whether the GUI
+# is launched via startup.bat, double-clicked, or started from the
+# Background Processes panel.
+_SCRIPT_DIR = Path(__file__).resolve().parent
+RECIPE_DIR  = _SCRIPT_DIR / "recipes"
+RUN_LOG_DIR = _SCRIPT_DIR / "run_logs"
 RECIPE_DIR.mkdir(exist_ok=True)
 RUN_LOG_DIR.mkdir(exist_ok=True)
 

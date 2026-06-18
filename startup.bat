@@ -11,7 +11,11 @@ echo   %DATE%  %TIME%
 echo  ============================================================
 echo.
 
-SET "LAB_DIR=C:\Users\gerri\Desktop\PPPL\Automation System Files"
+:: %~dp0 expands to the folder this script lives in, with a trailing
+:: backslash. This makes the script work from anywhere it is placed --
+:: no hardcoded path required.
+SET "LAB_DIR=%~dp0"
+IF "%LAB_DIR:~-1%"=="\" SET "LAB_DIR=%LAB_DIR:~0,-1%"
 SET "VENV_ACTIVATE=%LAB_DIR%\venv\Scripts\activate.bat"
 SET "MOSQUITTO_EXE=C:\Program Files\mosquitto\mosquitto.exe"
 SET "MOSQUITTO_SUB=C:\Program Files\mosquitto\mosquitto_sub.exe"

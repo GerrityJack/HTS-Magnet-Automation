@@ -192,7 +192,7 @@ Automation System Files/
 
 Place all project files in:
 ```
-C:\Users\gerri\Desktop\PPPL\Automation System Files\
+%USERPROFILE%\Desktop\PPPL\Automation System Files\
 ```
 
 Then double-click `setup_environment.bat`. It will:
@@ -253,7 +253,7 @@ When you close the GUI, a prompt asks whether to shut down the background driver
 
 **To run the tests:**
 ```
-cd "C:\Users\gerri\Desktop\PPPL\Automation System Files"
+cd "%USERPROFILE%\Desktop\PPPL\Automation System Files"
 call venv\Scripts\activate.bat
 python test_pseudo.py
 ```
@@ -535,7 +535,7 @@ The current topic structure already has device numbers (`labjack1`, `compressor1
 **startup.bat closes immediately without showing anything**
 Run it via `cmd /k` to keep the window open:
 ```
-cmd /k "C:\Users\gerri\Desktop\PPPL\Automation System Files\startup.bat"
+cmd /k "%USERPROFILE%\Desktop\PPPL\Automation System Files\startup.bat"
 ```
 
 **"[MQTT] Could not connect: No connection could be made"**

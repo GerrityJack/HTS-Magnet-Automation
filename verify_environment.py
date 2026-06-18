@@ -200,14 +200,17 @@ check("Docker",                check_docker)
 # ─────────────────────────────────────────────────────────────────────────────
 header("── Lab scripts ──────────────────────────────────────────")
 
-LAB_DIR = r"C:\Users\gerri\Desktop\PPPL\Automation System Files"
+import os, importlib.util
+
+# This script locates itself automatically using its own file path,
+# so it works no matter where the project folder is placed.
+from pathlib import Path as _Path
+LAB_DIR = str(_Path(__file__).resolve().parent)
 
 LAB_SCRIPTS = [
     ("mqtt_config",     "mqtt_config.py"),
     ("questdb_client",  "questdb_client.py"),
 ]
-
-import os, importlib.util
 
 for module_name, filename in LAB_SCRIPTS:
     filepath = os.path.join(LAB_DIR, filename)

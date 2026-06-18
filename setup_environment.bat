@@ -23,7 +23,13 @@ echo    - LabJack LJM    : https://labjack.com/pages/support
 echo.
 pause
 
-SET "LAB_DIR=C:\Users\gerri\Desktop\PPPL\Automation System Files"
+:: %~dp0 expands to the folder this script lives in, with a trailing
+:: backslash. This makes the script work from anywhere it is placed --
+:: no hardcoded path required.
+SET "LAB_DIR=%~dp0"
+:: Strip the trailing backslash so paths built from LAB_DIR are consistent
+:: with the rest of the script (e.g. "%LAB_DIR%\venv" not "%LAB_DIR%\\venv")
+IF "%LAB_DIR:~-1%"=="\" SET "LAB_DIR=%LAB_DIR:~0,-1%"
 SET "VENV_DIR=%LAB_DIR%\venv"
 SET "REQ_FILE=%LAB_DIR%\requirements.txt"
 
