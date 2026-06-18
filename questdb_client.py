@@ -14,5 +14,12 @@ def get_sender() -> Sender:
             sender.row(...)
             sender.flush()
     """
-    conf = f"http::addr={cfg.QUESTDB_HOST}:{cfg.QUESTDB_PORT};"
+    # protocol_version=2 skips the automatic server version detection
+    # that can cause "Could not detect server line protocol version" errors
+    # when the server is still starting up or when auto-detection tries https.
+    conf = (
+        f"http::addr={cfg.QUESTDB_HOST}:{cfg.QUESTDB_PORT};"
+        "protocol_version=2;"
+        "auto_flush=off;"
+    )
     return Sender.from_conf(conf)
