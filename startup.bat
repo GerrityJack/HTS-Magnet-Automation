@@ -21,8 +21,8 @@ IF NOT EXIST "%MOSQUITTO_EXE%" SET "MOSQUITTO_EXE=C:\Program Files\mosquitto\mos
 SET "MOSQUITTO_SUB=C:\Users\scuser\MQTT\Mosquitto\mosquitto_sub.exe"
 IF NOT EXIST "%MOSQUITTO_SUB%" SET "MOSQUITTO_SUB=C:\Program Files\mosquitto\mosquitto_sub.exe"
 SET "QUESTDB_REMOTE=198.125.227.226"
-SET "QUESTDB_EXE=D:\Program Files\questdb\bin\questdb.exe"
-SET "QUESTDB_DATA=D:\Program Files\questdb\data"
+SET "QUESTDB_EXE=%USERPROFILE%\questdb\bin\questdb.exe"
+SET "QUESTDB_DATA=%USERPROFILE%\questdb\data"
 SET QUESTDB_PORT=9000
 SET MQTT_HOST=localhost
 SET MQTT_PORT=1883
@@ -107,13 +107,12 @@ IF %ERRORLEVEL% EQU 0 (
 IF NOT EXIST "%QUESTDB_EXE%" (
     echo  ERROR: QuestDB binary not found at:
     echo         %QUESTDB_EXE%
-    echo  Expected at: D:\Program Files\questdb\bin\questdb.exe
-    echo  Update QUESTDB_EXE at the top of this script if it moved.
+    echo  If QuestDB moved, update QUESTDB_EXE at the top of this script.
     SET HAD_ERROR=1
     goto SHOW_RESULT
 )
 
-start "QuestDB" /MIN cmd /c ""%QUESTDB_EXE%" start -d "%QUESTDB_DATA%""
+start "QuestDB" /MIN cmd /c ""%QUESTDB_EXE%" -d "%QUESTDB_DATA%""
 echo  Waiting %QUESTDB_WAIT%s for QuestDB to initialise...
 timeout /t %QUESTDB_WAIT% /nobreak >nul
 
