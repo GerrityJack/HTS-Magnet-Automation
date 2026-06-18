@@ -2,7 +2,7 @@
 verify_environment.py
 ─────────────────────────────────────────────────────────────────────────────
 Checks that every required package is installed and importable, and that
-external services (Mosquitto, QuestDB, Docker) are reachable.
+external services (Mosquitto, QuestDB) are reachable.
 
 Run after setup_environment.bat, or any time something seems broken:
     python verify_environment.py
@@ -181,19 +181,26 @@ def check_questdb():
         warnings += 1
         return "warn"
 
-def check_docker():
-    result = subprocess.run(
-        ["docker", "info"],
-        capture_output=True, text=True, timeout=5
-    )
-    assert result.returncode == 0, \
-        "Docker not running or not installed\n" \
-        "         Start Docker Desktop"
-    return "Docker is running"
+def check_questdb_binary():
+    """
+    QuestDB runs as a standalone Windows binary on this system (no
+    Docker/virtualization required). This checks the binary exists
+    where startup.bat expects it, as a setup sanity check -- it does
+    not check whether QuestDB is currently running (see check_questdb).
+    """
+    questdb_exe = os.path.join(LAB_DIR, "questdb", "bin", "questdb.exe")
+    if not os.path.exists(questdb_exe):
+        warn(f"QuestDB binary not found at: {questdb_exe}")
+        print("         Download from https://questdb.io/download/ "
+              "and extract so questdb.exe is at that path.")
+        global warnings
+        warnings += 1
+        return "warn"
+    return f"QuestDB binary found at {questdb_exe}"
 
 check("Mosquitto MQTT broker", check_mosquitto)
 check_questdb()
-check("Docker",                check_docker)
+check_questdb_binary()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Section 5 — Local lab scripts importable

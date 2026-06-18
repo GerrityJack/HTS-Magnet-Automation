@@ -178,8 +178,14 @@ Automation System Files/
 1. **Python 3.13** — https://www.python.org/downloads/release/python-3130/
    Tick "Add Python to PATH" during installation.
 
-2. **Docker Desktop** — https://www.docker.com/products/docker-desktop/
-   Used to run QuestDB in a container.
+2. **QuestDB (standalone Windows binary)** — https://questdb.io/download/
+   Choose the Windows binaries (not Docker). Extract the archive into a
+   folder named `questdb` inside the project directory, so the result is:
+   `Automation System Files\questdb\bin\questdb.exe`
+   This runs as a normal user process — no Docker, no virtualization,
+   no admin rights required. This matters on managed lab machines where
+   virtualization may be locked out by IT policy even if a hypervisor
+   is technically present (common with Credential Guard / HVCI).
 
 3. **Mosquitto MQTT Broker** — https://mosquitto.org/download/
    Install with default settings.
@@ -241,7 +247,7 @@ Double-click `startup.bat`. It will:
 
 1. Activate the Python virtual environment
 2. Start Mosquitto (as a Windows service, or launch the exe if not installed as a service)
-3. Start QuestDB Docker container (creates it on first run, restarts it thereafter)
+3. Launch the QuestDB standalone binary in a minimized window (skipped if already running)
 4. Launch the LabJack driver in a minimized window
 5. Launch the compressor driver in a minimized window
 6. Launch the data logger in a minimized window
@@ -556,6 +562,16 @@ Then unplug and replug the USB cable before retrying.
 
 **Compressor driver: "Could not connect... check Device Manager"**
 The COM port has changed. Open Device Manager -> Ports (COM & LPT), note the current port number, and update `COMPRESSOR_SERIAL_PORT` in `mqtt_config.py`.
+
+**Docker fails with "virtualization support was not detected"**
+This is common on managed lab machines where IT has locked virtualization
+behind a security feature (Credential Guard / Memory Integrity), even if
+`systeminfo` shows a hypervisor is technically present. Admin rights are
+usually required to change this, and it may be intentionally locked down.
+This system does not need Docker at all — QuestDB runs as a standalone
+Windows binary instead. See Section 6 for the download link. If you
+previously set this up with Docker, no changes to `mqtt_config.py` are
+needed; only `startup.bat`'s QuestDB launch step is affected.
 
 **"table does not exist [table=labjack_metrics]" in QuestDB console**
 The logger has not yet written any real data (gauge not connected, or logger not running). Run `test_questdb_connection.py` to create the table with dummy data and verify the pipeline works.

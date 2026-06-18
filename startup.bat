@@ -19,7 +19,6 @@ IF "%LAB_DIR:~-1%"=="\" SET "LAB_DIR=%LAB_DIR:~0,-1%"
 SET "VENV_ACTIVATE=%LAB_DIR%\venv\Scripts\activate.bat"
 SET "MOSQUITTO_EXE=C:\Program Files\mosquitto\mosquitto.exe"
 SET "MOSQUITTO_SUB=C:\Program Files\mosquitto\mosquitto_sub.exe"
-SET QUESTDB_CONTAINER=questdb
 SET MQTT_PORT=1883
 SET QUESTDB_PORT=9000
 SET MOSQUITTO_WAIT=3
@@ -85,26 +84,32 @@ echo.
 
 :: ── Step 3: Start QuestDB ─────────────────────────────────────────────────────
 echo [3/6] Starting QuestDB...
-FOR /F %%i IN ('docker inspect --format={{.State.Running}} %QUESTDB_CONTAINER% 2^>nul') DO SET QDB_RUNNING=%%i
-IF "!QDB_RUNNING!"=="true" (
-    echo  OK - QuestDB already running.
+
+:: Check if QuestDB is already responding before trying to start it
+powershell -Command "try{Invoke-WebRequest -Uri 'http://localhost:%QUESTDB_PORT%' -TimeoutSec 2 -UseBasicParsing|Out-Null;exit 0}catch{exit 1}" >nul 2>&1
+IF %ERRORLEVEL% EQU 0 (
+    echo  OK - QuestDB already running at http://localhost:%QUESTDB_PORT%
     goto QUESTDB_DONE
 )
-docker inspect %QUESTDB_CONTAINER% >nul 2>&1
-IF %ERRORLEVEL% EQU 0 (
-    echo  Restarting stopped QuestDB container...
-    docker start %QUESTDB_CONTAINER% >nul
-) ELSE (
-    echo  Creating QuestDB container...
-    docker run -d --name=%QUESTDB_CONTAINER% -p 9000:9000 -p 8812:8812 -v questdb-data:/root/.questdb questdb/questdb >nul
-)
-IF %ERRORLEVEL% NEQ 0 (
-    echo  ERROR: Could not start QuestDB. Is Docker Desktop running?
+
+:: QuestDB standalone Windows binary -- no Docker or virtualization
+:: required. Download from https://questdb.io/download/ and extract
+:: so questdb.exe ends up at: %LAB_DIR%\questdb\bin\questdb.exe
+SET "QUESTDB_EXE=%LAB_DIR%\questdb\bin\questdb.exe"
+IF NOT EXIST "%QUESTDB_EXE%" (
+    echo  ERROR: QuestDB binary not found at:
+    echo    %QUESTDB_EXE%
+    echo  Download the Windows binaries from https://questdb.io/download/
+    echo  and extract them so questdb.exe is at that path.
     SET HAD_ERROR=1
     goto SHOW_RESULT
 )
+
+echo  Launching QuestDB...
+start "QuestDB" /MIN "%QUESTDB_EXE%" -d "%LAB_DIR%\questdb\data"
 echo  Waiting %QUESTDB_WAIT%s for QuestDB to initialise...
 timeout /t %QUESTDB_WAIT% /nobreak >nul
+
 :QUESTDB_DONE
 powershell -Command "try{Invoke-WebRequest -Uri 'http://localhost:%QUESTDB_PORT%' -TimeoutSec 3 -UseBasicParsing|Out-Null;exit 0}catch{exit 1}" >nul 2>&1
 IF %ERRORLEVEL% EQU 0 (
@@ -201,9 +206,8 @@ goto SHOW_RESULT
 :SHUTDOWN
 echo  Stopping background Python scripts...
 powershell -NoProfile -Command "Get-WmiObject Win32_Process | Where-Object { $_.Name -like 'python*' -and ($_.CommandLine -like '*labjack_mqtt_driver*' -or $_.CommandLine -like '*compressor_mqtt_driver*' -or $_.CommandLine -like '*lab_logger*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" 2>nul
-echo  Done.
-echo  QuestDB left running (data is safe).
-echo  To stop QuestDB: docker stop questdb
+echo  Done. QuestDB left running -- close its window manually if you
+echo  want to stop it (data is saved automatically).
 
 :SHOW_RESULT
 echo.
