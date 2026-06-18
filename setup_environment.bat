@@ -17,10 +17,8 @@ echo    4. Optionally install the LabJack LJM Python bindings
 echo.
 echo  Prerequisites that must be installed MANUALLY before running:
 echo    - Python 3.13    : already installed
-echo    - QuestDB        : https://questdb.io/download/  (Windows binaries,
-echo                       not Docker -- extract into a "questdb" folder
-echo                       inside this project so questdb.exe is at:
-echo                       questdb\bin\questdb.exe)
+echo    - QuestDB        : Running remotely at 198.125.227.226:9000
+echo                       No local install needed.
 echo    - Mosquitto      : https://mosquitto.org/download/
 echo    - LabJack LJM    : https://labjack.com/pages/support
 echo.

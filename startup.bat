@@ -51,39 +51,155 @@ echo.
 
 :: ── Step 2: Start Mosquitto ───────────────────────────────────────────────────
 echo [2/6] Starting Mosquitto MQTT broker...
-sc query mosquitto >nul 2>&1
+
+:: Check if Mosquitto is already listening on port 1883
+powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%MQTT_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
 IF %ERRORLEVEL% EQU 0 (
-    sc query mosquitto | findstr "RUNNING" >nul 2>&1
-    IF %ERRORLEVEL% EQU 0 (
-        echo  OK - Mosquitto already running as Windows service.
-        goto MOSQUITTO_DONE
-    )
+    echo  OK - Mosquitto already running on port %MQTT_PORT%.
+    goto MOSQUITTO_DONE
 )
+
+:: Try to start as a Windows service first (works if installed with service option)
 net start mosquitto >nul 2>&1
 IF %ERRORLEVEL% EQU 0 (
     echo  OK - Mosquitto started as Windows service.
     goto MOSQUITTO_DONE
 )
+
+:: Fall back to launching the exe directly.
+:: cmd /c is used so the -v argument goes to mosquitto.exe not to start.
 IF NOT EXIST "%MOSQUITTO_EXE%" (
-    echo  ERROR: Mosquitto not found at %MOSQUITTO_EXE%
-    echo  Install from https://mosquitto.org/download/
+    echo  ERROR: Mosquitto not found.
+    echo  Tried: %MOSQUITTO_EXE%
+    echo  Update MOSQUITTO_EXE at the top of this script.
     SET HAD_ERROR=1
     goto SHOW_RESULT
 )
-start "Mosquitto Broker" /MIN "%MOSQUITTO_EXE%" -v
-echo  Waiting %MOSQUITTO_WAIT%s for broker to start...
+start "Mosquitto Broker" /MIN cmd /c ""%MOSQUITTO_EXE%" -v"
+echo  Waiting %MOSQUITTO_WAIT%s for Mosquitto to start...
 timeout /t %MOSQUITTO_WAIT% /nobreak >nul
-:MOSQUITTO_DONE
-IF EXIST "%MOSQUITTO_SUB%" (
-    "%MOSQUITTO_SUB%" -h localhost -p %MQTT_PORT% -t "test" -C 0 -W 2 >nul 2>&1
-    IF %ERRORLEVEL% EQU 0 (
-        echo  OK - MQTT broker verified.
-    ) ELSE (
-        echo  WARNING: Could not verify MQTT broker.
-    )
+
+:: Verify it came up
+powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%MQTT_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
+IF %ERRORLEVEL% EQU 0 (
+    echo  OK - Mosquitto started at localhost:%MQTT_PORT%
 ) ELSE (
-    echo  INFO: Skipping broker ping.
+    echo  ERROR: Mosquitto launched but not responding on port %MQTT_PORT%.
+    echo  Check the Mosquitto Broker window for error messages.
+    SET HAD_ERROR=1
+    goto SHOW_RESULT
 )
+
+:MOSQUITTO_DONE
+echo.
+
+:: ── Step 3: Start QuestDB ─────────────────────────────────────────────────────
+echo [3/6] Checking QuestDB at 198.125.227.226:9000...
+
+:: QuestDB runs on a separate machine on the lab network -- nothing to
+:: start locally. We just verify it is reachable before continuing.
+powershell -NoProfile -Command "try{$r=Invoke-WebRequest -Uri 'http://198.125.227.226:9000' -TimeoutSec 5 -UseBasicParsing;exit 0}catch{exit 1}" >nul 2>&1
+IF %ERRORLEVEL% EQU 0 (
+    echo  OK - QuestDB reachable at 198.125.227.226:9000
+) ELSE (
+    echo  WARNING: QuestDB at 198.125.227.226:9000 is not responding.
+    echo    Check that the QuestDB machine is powered on and on the network.
+    echo    Data will not be logged until it is reachable -- continuing anyway.
+)
+echo.
+off
+chcp 65001 >nul
+SETLOCAL ENABLEDELAYEDEXPANSION
+TITLE HTS Magnet Testing Automation - System Startup
+COLOR 0A
+
+echo.
+echo  ============================================================
+echo   HTS Magnet Testing Automation - System Startup
+echo   %DATE%  %TIME%
+echo  ============================================================
+echo.
+
+:: %~dp0 expands to the folder this script lives in, with a trailing
+:: backslash. This makes the script work from anywhere it is placed --
+:: no hardcoded path required.
+SET "LAB_DIR=%~dp0"
+IF "%LAB_DIR:~-1%"=="\" SET "LAB_DIR=%LAB_DIR:~0,-1%"
+SET "VENV_ACTIVATE=%LAB_DIR%\venv\Scripts\activate.bat"
+:: Primary Mosquitto location on this machine (user install via uv/manual)
+SET "MOSQUITTO_EXE=C:\Users\scuser\MQTT\Mosquitto\mosquitto.exe"
+:: Fallback to standard Program Files install location
+IF NOT EXIST "%MOSQUITTO_EXE%" SET "MOSQUITTO_EXE=C:\Program Files\mosquitto\mosquitto.exe"
+SET "MOSQUITTO_SUB=C:\Users\scuser\MQTT\Mosquitto\mosquitto_sub.exe"
+IF NOT EXIST "%MOSQUITTO_SUB%" SET "MOSQUITTO_SUB=C:\Program Files\mosquitto\mosquitto_sub.exe"
+SET MQTT_PORT=1883
+SET QUESTDB_PORT=9000
+SET MOSQUITTO_WAIT=3
+SET QUESTDB_WAIT=8
+SET DRIVER_WAIT=4
+SET HAD_ERROR=0
+
+:: ── Step 1: Check virtual environment ────────────────────────────────────────
+echo [1/6] Checking Python environment...
+IF NOT EXIST "%VENV_ACTIVATE%" (
+    echo.
+    echo  ERROR: Virtual environment not found at:
+    echo         %VENV_ACTIVATE%
+    echo  Run setup_environment.bat first.
+    SET HAD_ERROR=1
+    goto SHOW_RESULT
+)
+call "%VENV_ACTIVATE%"
+IF %ERRORLEVEL% NEQ 0 (
+    echo  ERROR: Failed to activate virtual environment.
+    SET HAD_ERROR=1
+    goto SHOW_RESULT
+)
+echo  OK - environment activated.
+echo.
+
+:: ── Step 2: Start Mosquitto ───────────────────────────────────────────────────
+echo [2/6] Starting Mosquitto MQTT broker...
+
+:: Check if Mosquitto is already listening on port 1883
+powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%MQTT_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
+IF %ERRORLEVEL% EQU 0 (
+    echo  OK - Mosquitto already running on port %MQTT_PORT%.
+    goto MOSQUITTO_DONE
+)
+
+:: Try to start as a Windows service first (works if installed with service option)
+net start mosquitto >nul 2>&1
+IF %ERRORLEVEL% EQU 0 (
+    echo  OK - Mosquitto started as Windows service.
+    goto MOSQUITTO_DONE
+)
+
+:: Fall back to launching the exe directly.
+:: cmd /c is used so the -v argument goes to mosquitto.exe not to start.
+IF NOT EXIST "%MOSQUITTO_EXE%" (
+    echo  ERROR: Mosquitto not found.
+    echo  Tried: %MOSQUITTO_EXE%
+    echo  Update MOSQUITTO_EXE at the top of this script.
+    SET HAD_ERROR=1
+    goto SHOW_RESULT
+)
+start "Mosquitto Broker" /MIN cmd /c ""%MOSQUITTO_EXE%" -v"
+echo  Waiting %MOSQUITTO_WAIT%s for Mosquitto to start...
+timeout /t %MOSQUITTO_WAIT% /nobreak >nul
+
+:: Verify it came up
+powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%MQTT_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
+IF %ERRORLEVEL% EQU 0 (
+    echo  OK - Mosquitto started at localhost:%MQTT_PORT%
+) ELSE (
+    echo  ERROR: Mosquitto launched but not responding on port %MQTT_PORT%.
+    echo  Check the Mosquitto Broker window for error messages.
+    SET HAD_ERROR=1
+    goto SHOW_RESULT
+)
+
+:MOSQUITTO_DONE
 echo.
 
 :: ── Step 3: Start QuestDB ─────────────────────────────────────────────────────
@@ -177,16 +293,6 @@ start "Mosquitto Broker" /MIN "%MOSQUITTO_EXE%" -v
 echo  Waiting %MOSQUITTO_WAIT%s for broker to start...
 timeout /t %MOSQUITTO_WAIT% /nobreak >nul
 :MOSQUITTO_DONE
-IF EXIST "%MOSQUITTO_SUB%" (
-    "%MOSQUITTO_SUB%" -h localhost -p %MQTT_PORT% -t "test" -C 0 -W 2 >nul 2>&1
-    IF %ERRORLEVEL% EQU 0 (
-        echo  OK - MQTT broker verified.
-    ) ELSE (
-        echo  WARNING: Could not verify MQTT broker.
-    )
-) ELSE (
-    echo  INFO: Skipping broker ping.
-)
 echo.
 
 :: ── Step 3: Start QuestDB ─────────────────────────────────────────────────────
