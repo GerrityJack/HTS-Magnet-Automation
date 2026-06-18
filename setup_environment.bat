@@ -52,9 +52,31 @@ IF %ERRORLEVEL% EQU 0 (
     goto PYTHON_FOUND
 )
 
+:: uv installs versioned executables like python3.13.exe rather than
+:: python.exe -- check for that exact name too.
+python3.13 --version >nul 2>&1
+IF %ERRORLEVEL% EQU 0 (
+    FOR /F "tokens=*" %%v IN ('python3.13 --version') DO echo  Found via python3.13: %%v
+    SET "PYTHON_CMD=python3.13"
+    goto PYTHON_FOUND
+)
+
+:: Last resort: check the common uv install location directly, in case
+:: the user has not added it to PATH yet.
+IF EXIST "%USERPROFILE%\.local\bin\python3.13.exe" (
+    echo  Found via uv default install path: %USERPROFILE%\.local\bin\python3.13.exe
+    echo  WARNING: This folder is not on PATH. Add it for normal use:
+    echo    %USERPROFILE%\.local\bin
+    SET "PYTHON_CMD=%USERPROFILE%\.local\bin\python3.13.exe"
+    goto PYTHON_FOUND
+)
+
 echo  ERROR: Python 3.13 not found on PATH.
-echo  Try reopening this terminal as Administrator,
-echo  or reinstall Python 3.13 and tick "Add Python to PATH".
+echo  If you installed Python with uv, add this folder to PATH:
+echo    %USERPROFILE%\.local\bin
+echo  ^(Settings ^> System ^> Advanced ^> Environment Variables ^> User Path^)
+echo  Then close this window and run setup_environment.bat again.
+echo  Otherwise, reinstall Python 3.13 and tick "Add Python to PATH".
 goto FATAL
 
 :PYTHON_FOUND
