@@ -96,8 +96,8 @@ echo.
 :: ── Step 3: Check / Start QuestDB ────────────────────────────────────────────
 echo [3/6] Starting QuestDB...
 
-:: Check if QuestDB is already running anywhere
-powershell -NoProfile -Command "try{Invoke-WebRequest -Uri 'http://localhost:%QUESTDB_PORT%' -TimeoutSec 2 -UseBasicParsing|Out-Null;exit 0}catch{exit 1}" >nul 2>&1
+:: Check if QuestDB is already running (TCP check on port 9000)
+powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%QUESTDB_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
 IF %ERRORLEVEL% EQU 0 (
     echo  OK - QuestDB already running at localhost:%QUESTDB_PORT%
     goto QUESTDB_DONE
@@ -116,25 +116,26 @@ start "QuestDB" /MIN cmd /c ""%QUESTDB_EXE%" -d "%QUESTDB_DATA%""
 echo  Waiting for QuestDB to initialise (this can take up to 30s)...
 
 :: Retry loop -- check every 3 seconds for up to QUESTDB_WAIT seconds total
+:: Uses delayed expansion (!var!) so counter updates correctly inside the loop
 SET QDB_READY=0
 SET QDB_TRIES=0
 :QDB_WAIT_LOOP
 timeout /t 3 /nobreak >nul
-SET /A QDB_TRIES+=3
-powershell -NoProfile -Command "try{Invoke-WebRequest -Uri 'http://localhost:%QUESTDB_PORT%' -TimeoutSec 2 -UseBasicParsing|Out-Null;exit 0}catch{exit 1}" >nul 2>&1
-IF %ERRORLEVEL% EQU 0 (
-    SET QDB_READY=1
-    goto QDB_WAIT_DONE
-)
-IF %QDB_TRIES% LSS %QUESTDB_WAIT% (
-    echo  Still waiting... (%QDB_TRIES%s)
+SET /A QDB_TRIES=!QDB_TRIES!+3
+powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%QUESTDB_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
+IF %ERRORLEVEL% EQU 0 SET QDB_READY=1
+IF !QDB_READY! EQU 1 goto QDB_WAIT_DONE
+IF !QDB_TRIES! LSS %QUESTDB_WAIT% (
+    echo  Still waiting... (!QDB_TRIES!s)
     goto QDB_WAIT_LOOP
 )
+:: Fell through -- timed out
+goto QDB_WAIT_DONE
 :QDB_WAIT_DONE
-IF %QDB_READY% EQU 1 (
-    echo  OK - QuestDB ready at localhost:%QUESTDB_PORT% (took %QDB_TRIES%s)
+IF !QDB_READY! EQU 1 (
+    echo  OK - QuestDB ready at localhost:%QUESTDB_PORT% (took !QDB_TRIES!s)
 ) ELSE (
-    echo  WARNING: QuestDB is still starting after %QUESTDB_WAIT%s.
+    echo  WARNING: QuestDB still starting after %QUESTDB_WAIT%s.
     echo  It may still come up -- check http://localhost:%QUESTDB_PORT%
     echo  in your browser. Continuing startup anyway.
 )
