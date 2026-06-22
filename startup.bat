@@ -24,6 +24,7 @@ SET "QUESTDB_REMOTE=198.125.227.226"
 SET "QUESTDB_EXE=%USERPROFILE%\questdb\bin\questdb.exe"
 SET "QUESTDB_DATA=%USERPROFILE%\questdb\data"
 SET QUESTDB_PORT=9000
+SET QUESTDB_PG_PORT=8812
 SET QUESTDB_WAIT=25
 :: Grafana -- update GRAFANA_EXE if installed somewhere other than the
 :: standard location, or leave as-is if Grafana runs as a Windows service.
@@ -101,10 +102,15 @@ echo.
 :: ── Step 3: Check / Start QuestDB ────────────────────────────────────────────
 echo [3/7] Starting QuestDB...
 
-:: Check if QuestDB is already running
+:: Check both ports QuestDB exposes -- HTTP console (9000) AND the
+:: Postgres wire protocol (8812), since 8812 can come up later than
+:: 9000 and is the one Grafana actually depends on.
 powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%QUESTDB_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
-IF %ERRORLEVEL% EQU 0 (
-    echo  OK - QuestDB already running at localhost:%QUESTDB_PORT%
+SET QDB_HTTP_UP=%ERRORLEVEL%
+powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%QUESTDB_PG_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
+SET QDB_PG_UP=%ERRORLEVEL%
+IF %QDB_HTTP_UP% EQU 0 IF %QDB_PG_UP% EQU 0 (
+    echo  OK - QuestDB already running ^(HTTP:%QUESTDB_PORT%, PG:%QUESTDB_PG_PORT%^)
     goto QUESTDB_DONE
 )
 
@@ -119,30 +125,48 @@ IF NOT EXIST "%QUESTDB_EXE%" (
     goto SHOW_RESULT
 )
 
-start "QuestDB" /MIN cmd /c ""%QUESTDB_EXE%" -d "%QUESTDB_DATA%""
-echo  Waiting for QuestDB to initialise (this can take up to 30s)...
+:: Use /k (not /c) so the window stays open if QuestDB fails or exits
+:: immediately -- this is the only way to see why it failed, since /c
+:: closes the window the instant the inner command ends.
+start "QuestDB" /MIN cmd /k ""%QUESTDB_EXE%" -d "%QUESTDB_DATA%""
+echo  Waiting for QuestDB to initialise -- both HTTP and Postgres ports
+echo  (this can take up to %QUESTDB_WAIT%s, Postgres often comes up after HTTP)...
 
-:: Retry loop -- check every 3 seconds for up to QUESTDB_WAIT seconds total
+:: Retry loop -- check every 3 seconds for up to QUESTDB_WAIT seconds total.
+:: Only declares success once BOTH ports respond.
 SET QDB_READY=0
 SET QDB_TRIES=0
 :QDB_WAIT_LOOP
 timeout /t 3 /nobreak >nul
 SET /A QDB_TRIES=!QDB_TRIES!+3
 powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%QUESTDB_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
-IF %ERRORLEVEL% EQU 0 SET QDB_READY=1
+SET QDB_HTTP_UP=!ERRORLEVEL!
+powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%QUESTDB_PG_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
+SET QDB_PG_UP=!ERRORLEVEL!
+IF !QDB_HTTP_UP! EQU 0 IF !QDB_PG_UP! EQU 0 SET QDB_READY=1
 IF !QDB_READY! EQU 1 goto QDB_WAIT_DONE
 IF !QDB_TRIES! LSS %QUESTDB_WAIT% (
-    echo  Still waiting... (!QDB_TRIES!s)
+    IF !QDB_HTTP_UP! EQU 0 (
+        echo  Still waiting on Postgres port %QUESTDB_PG_PORT%... ^(!QDB_TRIES!s, HTTP is up^)
+    ) ELSE (
+        echo  Still waiting... ^(!QDB_TRIES!s^)
+    )
     goto QDB_WAIT_LOOP
 )
 goto QDB_WAIT_DONE
 :QDB_WAIT_DONE
 IF !QDB_READY! EQU 1 (
-    echo  OK - QuestDB ready at localhost:%QUESTDB_PORT% (took !QDB_TRIES!s)
+    echo  OK - QuestDB fully ready ^(HTTP:%QUESTDB_PORT%, PG:%QUESTDB_PG_PORT%^) -- took !QDB_TRIES!s
 ) ELSE (
-    echo  WARNING: QuestDB still starting after %QUESTDB_WAIT%s.
-    echo  It may still come up -- check http://localhost:%QUESTDB_PORT%
-    echo  in your browser. Continuing startup anyway.
+    echo  WARNING: QuestDB not fully up after %QUESTDB_WAIT%s.
+    IF !QDB_HTTP_UP! EQU 0 (
+        echo  HTTP console is up but the Postgres port %QUESTDB_PG_PORT% is not responding.
+        echo  Grafana will not be able to query QuestDB until this comes up.
+    ) ELSE (
+        echo  QuestDB does not appear to have started at all.
+        echo  Check the QuestDB window for error messages.
+    )
+    echo  Continuing startup anyway.
 )
 
 :QUESTDB_DONE
@@ -258,9 +282,9 @@ echo  ============================================================
 echo.
 
 :: Open QuestDB and Grafana web UIs automatically so they are ready
-:: to view alongside the GUI.
-echo  Opening QuestDB console and Grafana dashboard in your browser...
-start "" "http://localhost:%QUESTDB_PORT%"
+:: to view alongside the GUI. QuestDB console is not opened since it is
+:: not needed day to day -- Grafana reads from QuestDB directly.
+echo  Opening Grafana dashboard in your browser...
 start "" "http://localhost:%GRAFANA_PORT%/d/hts-magnet-automation/hts-magnet-testing-automation"
 echo.
 

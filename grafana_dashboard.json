@@ -37,7 +37,8 @@
                   "hidden": false,
                   "query": {
                     "datasource": {
-                      "name": "QuestDB"
+                      "name": "QuestDB",
+                      "type": "postgres"
                     },
                     "group": "postgres",
                     "kind": "DataQuery",
@@ -126,7 +127,8 @@
                   "hidden": false,
                   "query": {
                     "datasource": {
-                      "name": "QuestDB"
+                      "name": "QuestDB",
+                      "type": "postgres"
                     },
                     "group": "postgres",
                     "kind": "DataQuery",
@@ -217,7 +219,8 @@
                   "hidden": false,
                   "query": {
                     "datasource": {
-                      "name": "QuestDB"
+                      "name": "QuestDB",
+                      "type": "postgres"
                     },
                     "group": "postgres",
                     "kind": "DataQuery",
@@ -305,7 +308,8 @@
                   "hidden": false,
                   "query": {
                     "datasource": {
-                      "name": "QuestDB"
+                      "name": "QuestDB",
+                      "type": "postgres"
                     },
                     "group": "postgres",
                     "kind": "DataQuery",
@@ -394,7 +398,8 @@
                   "hidden": false,
                   "query": {
                     "datasource": {
-                      "name": "QuestDB"
+                      "name": "QuestDB",
+                      "type": "postgres"
                     },
                     "group": "postgres",
                     "kind": "DataQuery",
@@ -514,7 +519,8 @@
                   "hidden": false,
                   "query": {
                     "datasource": {
-                      "name": "QuestDB"
+                      "name": "QuestDB",
+                      "type": "postgres"
                     },
                     "group": "postgres",
                     "kind": "DataQuery",
@@ -637,7 +643,8 @@
                   "hidden": false,
                   "query": {
                     "datasource": {
-                      "name": "QuestDB"
+                      "name": "QuestDB",
+                      "type": "postgres"
                     },
                     "group": "postgres",
                     "kind": "DataQuery",
@@ -760,7 +767,8 @@
                   "hidden": false,
                   "query": {
                     "datasource": {
-                      "name": "QuestDB"
+                      "name": "QuestDB",
+                      "type": "postgres"
                     },
                     "group": "postgres",
                     "kind": "DataQuery",
@@ -929,7 +937,8 @@
                   "hidden": false,
                   "query": {
                     "datasource": {
-                      "name": "QuestDB"
+                      "name": "QuestDB",
+                      "type": "postgres"
                     },
                     "group": "postgres",
                     "kind": "DataQuery",
@@ -1237,5 +1246,15 @@
   },
   "title": "HTS Magnet Testing Automation",
   "variables": [],
-  "uid": "hts-magnet-automation"
+  "uid": "hts-magnet-automation",
+  "__inputs": [
+    {
+      "name": "DS_QUESTDB",
+      "label": "QuestDB",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "postgres",
+      "pluginName": "PostgreSQL"
+    }
+  ]
 }
