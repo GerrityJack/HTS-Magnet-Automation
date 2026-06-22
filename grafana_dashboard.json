@@ -1236,5 +1236,6 @@
     "to": "now"
   },
   "title": "HTS Magnet Testing Automation",
-  "variables": []
+  "variables": [],
+  "uid": "hts-magnet-automation"
 }

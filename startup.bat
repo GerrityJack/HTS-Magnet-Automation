@@ -133,7 +133,8 @@ IF %ERRORLEVEL% EQU 0 (
 
 :: Fall back to launching the exe directly if a service install is not present
 IF EXIST "%GRAFANA_EXE%" (
-    start "Grafana" /MIN cmd /c ""%GRAFANA_EXE%""
+    for %%G in ("%GRAFANA_EXE%") do SET "GRAFANA_BIN_DIR=%%~dpG"
+start "Grafana" /MIN cmd /c "cd /d "%GRAFANA_BIN_DIR%" && "%GRAFANA_EXE%" server"
     echo  Launching Grafana...
     goto GRAFANA_WAIT
 ) ELSE (
@@ -222,8 +223,8 @@ echo.
 :: Open QuestDB and Grafana web UIs automatically so they are ready
 :: to view alongside the GUI.
 echo  Opening QuestDB console and Grafana dashboard in your browser...
-start "" "http://%QUESTDB_REMOTE%:%QUESTDB_PORT%"
-start "" "http://localhost:%GRAFANA_PORT%"
+start "" "http://localhost:%QUESTDB_PORT%"
+start "" "http://localhost:%GRAFANA_PORT%/d/hts-magnet-automation/hts-magnet-testing-automation"
 echo.
 
 echo  ============================================================
