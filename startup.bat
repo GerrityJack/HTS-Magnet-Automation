@@ -21,18 +21,15 @@ IF NOT EXIST "%MOSQUITTO_EXE%" SET "MOSQUITTO_EXE=C:\Program Files\mosquitto\mos
 SET "MOSQUITTO_SUB=C:\Users\scuser\MQTT\Mosquitto\mosquitto_sub.exe"
 IF NOT EXIST "%MOSQUITTO_SUB%" SET "MOSQUITTO_SUB=C:\Program Files\mosquitto\mosquitto_sub.exe"
 SET "QUESTDB_REMOTE=198.125.227.226"
-SET "QUESTDB_EXE=%USERPROFILE%\questdb\bin\questdb.exe"
-SET "QUESTDB_DATA=%USERPROFILE%\questdb\data"
 SET QUESTDB_PORT=9000
 :: Grafana -- update GRAFANA_EXE if installed somewhere other than the
 :: standard location, or leave as-is if Grafana runs as a Windows service.
-SET "GRAFANA_EXE=C:\Program Files\GrafanaLabs\grafana\bin\grafana-server.exe"
+SET "GRAFANA_EXE=D:\Program Files\grafana-v12.0.2\bin\grafana.exe"
 SET GRAFANA_PORT=3000
 SET GRAFANA_WAIT=10
 SET MQTT_HOST=localhost
 SET MQTT_PORT=1883
 SET MOSQUITTO_WAIT=4
-SET QUESTDB_WAIT=25
 SET DRIVER_WAIT=4
 SET HAD_ERROR=0
 
@@ -99,50 +96,19 @@ IF %ERRORLEVEL% EQU 0 (
 echo.
 
 :: ── Step 3: Check / Start QuestDB ────────────────────────────────────────────
-echo [3/7] Starting QuestDB...
+echo [3/7] Checking QuestDB...
 
-:: Check if QuestDB is already running (TCP check on port 9000)
+:: QuestDB is already running on this machine separately and does not
+:: need to be launched here -- the local launch attempt requires write
+:: access to its data folder which this account does not have. Just
+:: verify it is reachable so the rest of the script knows whether to
+:: warn about it being unavailable.
 powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%QUESTDB_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
 IF %ERRORLEVEL% EQU 0 (
     echo  OK - QuestDB already running at localhost:%QUESTDB_PORT%
-    goto QUESTDB_DONE
-)
-
-:: Launch the local binary (lives outside the repo in %%USERPROFILE%%\.localin)
-IF NOT EXIST "%QUESTDB_EXE%" (
-    echo  ERROR: QuestDB binary not found at:
-    echo         %QUESTDB_EXE%
-    echo  If QuestDB moved, update QUESTDB_EXE at the top of this script.
-    SET HAD_ERROR=1
-    goto SHOW_RESULT
-)
-
-start "QuestDB" /MIN cmd /c ""%QUESTDB_EXE%" -d "%QUESTDB_DATA%""
-echo  Waiting for QuestDB to initialise (this can take up to 30s)...
-
-:: Retry loop -- check every 3 seconds for up to QUESTDB_WAIT seconds total
-:: Uses delayed expansion (!var!) so counter updates correctly inside the loop
-SET QDB_READY=0
-SET QDB_TRIES=0
-:QDB_WAIT_LOOP
-timeout /t 3 /nobreak >nul
-SET /A QDB_TRIES=!QDB_TRIES!+3
-powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%QUESTDB_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
-IF %ERRORLEVEL% EQU 0 SET QDB_READY=1
-IF !QDB_READY! EQU 1 goto QDB_WAIT_DONE
-IF !QDB_TRIES! LSS %QUESTDB_WAIT% (
-    echo  Still waiting... (!QDB_TRIES!s)
-    goto QDB_WAIT_LOOP
-)
-:: Fell through -- timed out
-goto QDB_WAIT_DONE
-:QDB_WAIT_DONE
-IF !QDB_READY! EQU 1 (
-    echo  OK - QuestDB ready at localhost:%QUESTDB_PORT% (took !QDB_TRIES!s)
 ) ELSE (
-    echo  WARNING: QuestDB still starting after %QUESTDB_WAIT%s.
-    echo  It may still come up -- check http://localhost:%QUESTDB_PORT%
-    echo  in your browser. Continuing startup anyway.
+    echo  WARNING: QuestDB not reachable at localhost:%QUESTDB_PORT%.
+    echo  Start it manually if needed -- data will not be logged until it is up.
 )
 
 :QUESTDB_DONE
@@ -256,7 +222,7 @@ echo.
 :: Open QuestDB and Grafana web UIs automatically so they are ready
 :: to view alongside the GUI.
 echo  Opening QuestDB console and Grafana dashboard in your browser...
-start "" "http://localhost:%QUESTDB_PORT%"
+start "" "http://%QUESTDB_REMOTE%:%QUESTDB_PORT%"
 start "" "http://localhost:%GRAFANA_PORT%"
 echo.
 
