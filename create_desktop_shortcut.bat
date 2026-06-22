@@ -24,6 +24,13 @@ IF NOT EXIST "%TARGET_PATH%" (
     exit /b 1
 )
 
+:: If a shortcut already exists, delete it first so the new one
+:: always reflects the current TARGET_PATH and settings below.
+IF EXIST "%SHORTCUT_PATH%" (
+    echo  Existing shortcut found - replacing it...
+    del /F "%SHORTCUT_PATH%" >nul 2>&1
+)
+
 :: Use PowerShell to create the .lnk file since batch cannot do this directly
 powershell -NoProfile -Command ^
     "$ws = New-Object -ComObject WScript.Shell; " ^
@@ -40,7 +47,7 @@ IF %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-echo  OK - Shortcut created at:
+echo  OK - Shortcut created (or replaced) at:
 echo       %SHORTCUT_PATH%
 echo.
 echo  You can now double-click "Start HTS Automation" on your Desktop

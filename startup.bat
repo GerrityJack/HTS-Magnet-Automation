@@ -24,6 +24,11 @@ SET "QUESTDB_REMOTE=198.125.227.226"
 SET "QUESTDB_EXE=%USERPROFILE%\questdb\bin\questdb.exe"
 SET "QUESTDB_DATA=%USERPROFILE%\questdb\data"
 SET QUESTDB_PORT=9000
+:: Grafana -- update GRAFANA_EXE if installed somewhere other than the
+:: standard location, or leave as-is if Grafana runs as a Windows service.
+SET "GRAFANA_EXE=C:\Program Files\GrafanaLabs\grafana\bin\grafana-server.exe"
+SET GRAFANA_PORT=3000
+SET GRAFANA_WAIT=10
 SET MQTT_HOST=localhost
 SET MQTT_PORT=1883
 SET MOSQUITTO_WAIT=4
@@ -32,7 +37,7 @@ SET DRIVER_WAIT=4
 SET HAD_ERROR=0
 
 :: ── Step 1: Check virtual environment ────────────────────────────────────────
-echo [1/6] Checking Python environment...
+echo [1/7] Checking Python environment...
 IF NOT EXIST "%VENV_ACTIVATE%" (
     echo.
     echo  ERROR: Virtual environment not found at:
@@ -51,7 +56,7 @@ echo  OK - environment activated.
 echo.
 
 :: ── Step 2: Start Mosquitto ───────────────────────────────────────────────────
-echo [2/6] Starting Mosquitto MQTT broker...
+echo [2/7] Starting Mosquitto MQTT broker...
 
 :: Check if already listening on port 1883
 powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%MQTT_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
@@ -94,7 +99,7 @@ IF %ERRORLEVEL% EQU 0 (
 echo.
 
 :: ── Step 3: Check / Start QuestDB ────────────────────────────────────────────
-echo [3/6] Starting QuestDB...
+echo [3/7] Starting QuestDB...
 
 :: Check if QuestDB is already running (TCP check on port 9000)
 powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%QUESTDB_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
@@ -143,8 +148,51 @@ IF !QDB_READY! EQU 1 (
 :QUESTDB_DONE
 echo.
 
+:: -- Step 4: Start Grafana -------------------------------------------------
+echo [4/7] Starting Grafana...
+
+:: Check if Grafana is already listening on port 3000
+powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%GRAFANA_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
+IF %ERRORLEVEL% EQU 0 (
+    echo  OK - Grafana already running at localhost:%GRAFANA_PORT%
+    goto GRAFANA_DONE
+)
+
+:: Try to start as a Windows service first
+net start grafana >nul 2>&1
+IF %ERRORLEVEL% EQU 0 (
+    echo  OK - Grafana started as Windows service.
+    goto GRAFANA_WAIT
+)
+
+:: Fall back to launching the exe directly if a service install is not present
+IF EXIST "%GRAFANA_EXE%" (
+    start "Grafana" /MIN cmd /c ""%GRAFANA_EXE%""
+    echo  Launching Grafana...
+    goto GRAFANA_WAIT
+) ELSE (
+    echo  INFO: Grafana not found as a service or at %GRAFANA_EXE%
+    echo  Update GRAFANA_EXE at the top of this script if installed elsewhere.
+    echo  Continuing without Grafana -- you can start it manually later.
+    goto GRAFANA_DONE
+)
+
+:GRAFANA_WAIT
+echo  Waiting %GRAFANA_WAIT%s for Grafana to initialise...
+timeout /t %GRAFANA_WAIT% /nobreak >nul
+powershell -NoProfile -Command "try{$t=New-Object Net.Sockets.TcpClient;$t.Connect('localhost',%GRAFANA_PORT%);$t.Close();exit 0}catch{exit 1}" >nul 2>&1
+IF %ERRORLEVEL% EQU 0 (
+    echo  OK - Grafana ready at localhost:%GRAFANA_PORT%
+) ELSE (
+    echo  WARNING: Grafana not responding yet -- it may still be starting.
+    echo  Check http://localhost:%GRAFANA_PORT% in a browser shortly.
+)
+
+:GRAFANA_DONE
+echo.
+
 :: ── Step 4: Start LabJack driver ──────────────────────────────────────────────
-echo [4/6] Starting LabJack driver...
+echo [5/7] Starting LabJack driver...
 IF NOT EXIST "%LAB_DIR%\labjack_mqtt_driver.py" (
     echo  WARNING: labjack_mqtt_driver.py not found - skipping.
     goto LABJACK_DONE
@@ -163,7 +211,7 @@ IF "!LJ_COUNT!" GTR "0" (
 echo.
 
 :: ── Step 5: Start Compressor driver ──────────────────────────────────────────
-echo [5/6] Starting Compressor driver...
+echo [6/7] Starting Compressor driver...
 IF NOT EXIST "%LAB_DIR%\compressor_mqtt_driver.py" (
     echo  WARNING: compressor_mqtt_driver.py not found - skipping.
     goto COMPRESSOR_DONE
@@ -182,7 +230,7 @@ IF "!CP_COUNT!" GTR "0" (
 echo.
 
 :: ── Step 6: Start Lab Logger ──────────────────────────────────────────────────
-echo [6/6] Starting Lab Logger...
+echo [7/7] Starting Lab Logger...
 IF NOT EXIST "%LAB_DIR%\lab_logger.py" (
     echo  WARNING: lab_logger.py not found - skipping.
     goto LOGGER_DONE
@@ -201,7 +249,19 @@ echo.
 
 :: ── Launch GUI ────────────────────────────────────────────────────────────────
 echo  ============================================================
-echo   All background services started. Launching GUI...
+echo   All background services started.
+echo  ============================================================
+echo.
+
+:: Open QuestDB and Grafana web UIs automatically so they are ready
+:: to view alongside the GUI.
+echo  Opening QuestDB console and Grafana dashboard in your browser...
+start "" "http://localhost:%QUESTDB_PORT%"
+start "" "http://localhost:%GRAFANA_PORT%"
+echo.
+
+echo  ============================================================
+echo   Launching GUI...
 echo   (This window stays open behind the GUI)
 echo  ============================================================
 echo.
@@ -225,9 +285,20 @@ echo  Background drivers left running.
 goto SHOW_RESULT
 
 :SHUTDOWN
-echo  Stopping background Python scripts...
+echo  Stopping background processes and closing their windows...
+
+:: Kill the Python scripts first so they shut down cleanly
 powershell -NoProfile -Command "Get-WmiObject Win32_Process | Where-Object { $_.Name -like 'python*' -and ($_.CommandLine -like '*labjack_mqtt_driver*' -or $_.CommandLine -like '*compressor_mqtt_driver*' -or $_.CommandLine -like '*lab_logger*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" 2>nul
-echo  Done. QuestDB left running (data is safe).
+
+:: Now close the cmd /k console windows themselves -- killing the python
+:: process above does not close the cmd window it was running inside,
+:: since /k means "keep the window open". Close by window title instead.
+taskkill /FI "WINDOWTITLE eq LabJack Driver*"    /T /F >nul 2>&1
+taskkill /FI "WINDOWTITLE eq Compressor Driver*" /T /F >nul 2>&1
+taskkill /FI "WINDOWTITLE eq Lab Logger*"        /T /F >nul 2>&1
+taskkill /FI "WINDOWTITLE eq Mosquitto Broker*"  /T /F >nul 2>&1
+
+echo  Done. QuestDB and Grafana left running (data is safe).
 
 :SHOW_RESULT
 echo.
