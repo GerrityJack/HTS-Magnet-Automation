@@ -228,8 +228,8 @@ A successful setup ends with all checks showing PASS (QuestDB will show WARN sin
 
 ## 7. Moving to a New Computer
 
-1. Copy the entire `Automation System Files` folder to the new machine
-2. **Delete the `venv` folder** from the copy — it contains compiled binaries that only work on the machine it was built on
+1. Copy the entire `Automation System Files` folder to the new machine (or clone the GitHub repo)
+2. **Delete the `venv` folder** from the copy if present — it contains compiled binaries that only work on the machine it was built on. (If cloning from GitHub, `venv` is not tracked, so there is nothing to delete.)
 3. Install all prerequisites listed in Section 6 on the new machine
 4. Run `setup_environment.bat` to rebuild the venv
 5. Plug in the USB-to-serial adapter for the compressor, then open Device Manager -> Ports (COM & LPT) and note the assigned COM port
@@ -238,6 +238,54 @@ A successful setup ends with all checks showing PASS (QuestDB will show WARN sin
 8. The LabJack does **not** need a COM port update — the LJM driver finds it by serial number automatically
 
 **Note on COM port reassignment:** Windows assigns COM numbers based on which USB port the adapter is plugged into and the history on that machine. If you unplug and replug the adapter into a different USB port, Windows may assign a new number. Always check Device Manager if the compressor driver fails to connect.
+
+### Real issues encountered during a computer move (and how they were fixed)
+
+These are problems actually hit when moving this system to a new lab desktop. Recorded here so the same hour-long debugging session doesn't have to happen twice.
+
+**Python installed but not found by any script**
+If Python was installed with `uv` instead of the standard python.org installer, it does **not** register with the `py` launcher (`py -3.13` will fail) and the executable may be named `python3.13.exe` rather than `python.exe`. Find the real install with:
+```powershell
+uv python list
+```
+It typically lives at `%USERPROFILE%\.local\bin\python3.13.exe`. Add that folder to PATH (see below), or `setup_environment.bat` will also look there directly as a fallback even before PATH is fixed.
+
+**Added a folder to PATH but it still doesn't work**
+The Windows GUI environment variable editor has two "OK" buttons — one on the inner list-editor dialog, one on the outer "Environment Variables" window. If you click OK on the inner one but Cancel (or the X) on the outer one, **nothing is saved**, even though the list looked correct when you reopened it afterward in the same session (it was just showing your unsaved edit, not what's actually in the registry). Verify what's actually saved with:
+```powershell
+[System.Environment]::GetEnvironmentVariable("Path","User") -split ';' | findstr "local"
+```
+If that prints nothing but the GUI shows the entry, redo it and click OK on **both** dialogs. Or skip the GUI entirely and set it directly:
+```powershell
+$current = [System.Environment]::GetEnvironmentVariable("Path","User")
+[System.Environment]::SetEnvironmentVariable("Path","$current;C:\Users\<you>\.local\bin","User")
+```
+Also remember that PATH changes never apply to terminal windows that were already open — close and reopen them.
+
+**Multiple Python versions installed via uv (e.g. 3.13 and 3.14) cause ambiguity**
+Generic commands like `python` or `python3` may not resolve to anything if `uv` only installed versioned executables. `setup_environment.bat` tries `python3.13` specifically (in addition to several fallbacks) for exactly this reason — if you add new Python versions later, check that the script's detection logic still finds 3.13 specifically and not a newer version with breaking changes.
+
+**Docker Desktop fails with "virtualization support was not detected"**
+On managed/lab machines, this usually means a security feature (Credential Guard / Memory Integrity, also called HVCI) is using the hypervisor for itself and won't expose it to other hypervisors like Docker's WSL2 backend — even if `systeminfo` shows a hypervisor is technically present. Enabling this for Docker requires admin rights and BIOS-level changes that IT may not grant on a lab machine. **This system does not need Docker.** QuestDB runs as a standalone Windows binary instead (see Section 6) — no virtualization required.
+
+**QuestDB launches but the script says it's "not responding on port 9000"**
+Two separate causes were found here:
+- `questdb.exe start` is the **Windows service** subcommand, not the "run now" command — it silently does nothing unless QuestDB was previously registered as a service with `questdb.exe install`. Run it with no subcommand instead: `questdb.exe -d "<data folder>"`.
+- The startup script's readiness check used `Invoke-WebRequest`, which can fail even when QuestDB is genuinely up and reachable in a browser (it doesn't like the response QuestDB's web console returns in some cases). The check now uses a plain TCP socket connection to port 9000 instead, which only asks "is anything listening here" and is far more reliable.
+
+**Lab logger crashes with "Could not detect server's line protocol version... https://localhost:9000/settings"**
+This is a known quirk of the QuestDB Python client: on first connect it tries to auto-detect the server's protocol version by querying `/settings`, and if that request is slow or fails (e.g. QuestDB still warming up), the client incorrectly falls back to `https` and then fails outright. Fixed in `questdb_client.py` by explicitly setting `protocol_version=2;auto_flush=off;` in the connection string, which skips the auto-detection entirely.
+
+**Mosquitto: "net start mosquitto" says "service name is invalid"**
+This means Mosquitto was not installed with the Windows service option — it's just an exe sitting in a folder. `startup.bat` already falls back to launching it directly in that case, but an earlier bug meant the -v (verbose) flag was being passed to `start` instead of to `mosquitto.exe`, since cmd.exe's `start` command treats the first quoted argument as a window title. Fixed by wrapping the whole launch in `cmd /c "..."` so the argument lands on the right program.
+
+**LabJack driver crashes with AttributeError: 'NoneType' object has no attribute 'LJM_Open5'**
+This means the `labjack-ljm` Python package is installed, but the underlying LJM system driver (a .dll plus USB driver, separate from the Python package) is missing, outdated, or wasn't found. Installing the LJM system driver requires administrator rights — there is no user-space workaround, since it installs a kernel-level USB driver. If you don't have admin rights on the lab machine, this requires IT to run the installer from https://labjack.com/pages/support (LJM Software Installers, Windows 64-bit). Everything else in the system (Mosquitto, QuestDB, the compressor driver, the logger, the GUI) works completely independently of the LabJack and can be tested while waiting on this.
+
+**verify_environment.py crashes with NameError: name 'os' is not defined**
+An earlier edit moved LAB_DIR's definition (which uses os.path) above the import os line. If this resurfaces after further edits, check that all imports are at the very top of the file, before any code that uses them runs at module load time — not just before the function definitions that use them, since in this script some of those functions are called immediately rather than only when main() runs.
+
+---
 
 ---
 
@@ -559,6 +607,9 @@ Get-WmiObject Win32_Process |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 ```
 Then unplug and replug the USB cable before retrying.
+
+**LabJack driver: AttributeError 'NoneType' object has no attribute 'LJM_Open5'**
+The LJM system driver (not the Python package) is missing or outdated. This requires administrator rights to install — see Section 7 for the exact installer link and what to tell IT if you don't have admin rights yourself.
 
 **Compressor driver: "Could not connect... check Device Manager"**
 The COM port has changed. Open Device Manager -> Ports (COM & LPT), note the current port number, and update `COMPRESSOR_SERIAL_PORT` in `mqtt_config.py`.
