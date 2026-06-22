@@ -285,7 +285,7 @@ echo.
 :: to view alongside the GUI. QuestDB console is not opened since it is
 :: not needed day to day -- Grafana reads from QuestDB directly.
 echo  Opening Grafana dashboard in your browser...
-start "" "http://localhost:%GRAFANA_PORT%/d/hts-magnet-automation/hts-magnet-testing-automation"
+start "" "http://localhost:%GRAFANA_PORT%/d/adzdrrq/"
 echo.
 
 echo  ============================================================
